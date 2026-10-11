@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SimulacionEcoWeb · SimuLab</title>
+  <meta name="description" content="SimulacionEcoWeb: 8 simuladores gratuitos de economía, inventarios, cadena de suministro y colas.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23ec3013'/%3E%3Crect x='3' y='9' width='2' height='4' fill='%23f3f2f2'/%3E%3Crect x='7' y='6' width='2' height='7' fill='%23f3f2f2'/%3E%3Crect x='11' y='3' width='2' height='10' fill='%23f3f2f2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css">
+  <link rel="stylesheet" href="css/theme.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"></script>
+  <!-- app.js registra Alpine.data('simulab') y luego arranca Alpine (ESM). -->
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+<div class="sl-app" x-data="simulab" x-cloak>
+  <header class="nav sl-header">
+    <span class="nav-brand sl-brand">SimuLab<span class="sl-brand-sub">Laboratorio de decisiones económicas y operativas</span></span>
+    <span class="tag tag-outline">8 simuladores · gratuito</span>
+  </header>
+
+  <div class="sl-body">
+    <aside class="sl-sidebar" aria-label="Simuladores">
+      <template x-for="g in groups" :key="g.name">
+        <div class="sl-group">
+          <h6 class="sl-group-name" x-text="g.name"></h6>
+          <template x-for="it in g.items" :key="it.id">
+            <a class="sl-item" :href="'#/' + it.id" :class="{ 'is-active': it.id === sim }"
+               :aria-current="it.id === sim ? 'page' : null" @click.prevent="go(it.id)">
+              <span class="sl-item-num" x-text="it.num"></span><span x-text="it.title"></span>
+            </a>
+          </template>
+        </div>
+      </template>
+    </aside>
+
+    <main class="sl-main">
+      <section class="sl-intro">
+        <span class="card-kicker sl-kicker" x-text="'Simulador ' + cur.num + ' · ' + cur.group"></span>
+        <h1 class="sl-title" x-text="cur.title"></h1>
+        <p class="sl-short" x-text="cur.short"></p>
+        <div class="sl-model">
+          <span class="sl-model-label">Modelo</span>
+          <code class="sl-formula" x-text="cur.formula"></code>
+        </div>
+      </section>
+
+      <hr class="hr sl-hr">
+
+      <section class="sl-work">
+        <div class="sl-params">
+          <h6 class="sl-h6">Parámetros</h6>
+          <template x-for="p in cur.params" :key="cur.id + '-' + p.key">
+            <div class="sl-param">
+              <div class="sl-param-head">
+                <label class="sl-param-label" :for="p.type === 'seg' ? null : 'p-' + cur.id + '-' + p.key" :id="'l-' + cur.id + '-' + p.key" x-text="p.label"></label>
+                <output class="sl-param-value" x-text="display(p)"></output>
+              </div>
+              <template x-if="p.type !== 'seg'">
+                <input class="sl-range" type="range" :id="'p-' + cur.id + '-' + p.key"
+                       :min="p.min" :max="p.max" :step="p.step" :value="vals[cur.id][p.key]"
+                       :aria-valuetext="display(p)"
+                       @input="setP(p.key, parseFloat($event.target.value))">
+              </template>
+              <template x-if="p.type === 'seg'">
+                <div class="seg sl-seg" role="radiogroup" :aria-labelledby="'l-' + cur.id + '-' + p.key">
+                  <template x-for="o in p.opts" :key="o[1]">
+                    <label class="seg-opt"><input type="radio" :name="cur.id + '-' + p.key" :value="o[1]"
+                           :checked="vals[cur.id][p.key] === o[1]" @change="setP(p.key, o[1])"><span x-text="o[0]"></span></label>
+                  </template>
+                </div>
+              </template>
+              <span class="sl-param-desc" x-text="p.desc"></span>
+            </div>
+          </template>
+          <template x-if="cur.stochastic">
+            <div class="sl-param">
+              <div class="sl-param-head">
+                <span class="sl-param-label">Semilla aleatoria</span>
+                <span class="sl-param-value" x-text="seed" aria-live="polite"></span>
+              </div>
+              <span class="sl-param-desc">La misma semilla reproduce exactamente el mismo escenario de demanda o llegadas.</span>
+              <button type="button" class="btn btn-secondary sl-btn" @click="newSeed()">Nueva semilla</button>
+            </div>
+          </template>
+          <button type="button" class="btn btn-ghost sl-btn sl-reset" @click="reset()">Restablecer valores</button>
+        </div>
+
+        <div class="sl-results">
+          <div class="sl-kpis">
+            <template x-for="(k, i) in res ? res.kpis : []" :key="cur.id + i">
+              <div class="sl-kpi">
+                <span class="sl-kpi-label" x-text="k.label"></span>
+                <span class="sl-kpi-value" x-text="k.value"></span>
+                <span class="sl-kpi-unit" x-text="k.unit"></span>
+              </div>
+            </template>
+          </div>
+
+          <figure class="sl-chart">
+            <figcaption class="sl-chart-head">
+              <span class="sl-chart-title" x-text="res?.chartTitle"></span>
+              <span class="sl-legend">
+                <template x-for="l in res ? res.legend : []" :key="l.name">
+                  <span class="sl-legend-item"><span class="sl-swatch" :style="{ background: l.color }"></span><span x-text="l.name"></span></span>
+                </template>
+              </span>
+            </figcaption>
+            <div class="sl-canvas-wrap">
+              <canvas x-ref="canvas" x-effect="recompute()" role="img" :aria-label="res ? res.chartTitle + '. ' + res.lectura : 'Gráfica de la simulación'"></canvas>
+            </div>
+          </figure>
+
+          <template x-if="res && res.bars.length">
+            <div class="sl-bars">
+              <h6 class="sl-h6">Flujo del proceso · utilización por etapa</h6>
+              <template x-for="b in res.bars" :key="b.name">
+                <div class="sl-bar">
+                  <span class="sl-bar-name" x-text="b.name"></span>
+                  <div class="sl-bar-track"><div class="sl-bar-fill" :style="{ width: b.w + '%', background: b.color }"></div></div>
+                  <span class="sl-bar-txt" x-text="b.txt"></span>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <div class="sl-lectura">
+            <span class="card-kicker sl-kicker">Lectura del escenario</span>
+            <p aria-live="polite" x-text="res?.lectura"></p>
+          </div>
+        </div>
+      </section>
+
+      <hr class="hr sl-hr">
+
+      <section class="sl-explain">
+        <div class="sl-col">
+          <h4>Qué simula</h4>
+          <p x-text="cur.que"></p>
+        </div>
+        <div class="sl-col">
+          <h4>Efectos que observarás</h4>
+          <template x-for="e in cur.efectos" :key="e"><p class="sl-ruled" x-text="e"></p></template>
+        </div>
+        <div class="sl-col">
+          <h4>Utilidad en los negocios</h4>
+          <template x-for="u in cur.utilidad" :key="u"><p class="sl-ruled" x-text="u"></p></template>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="sl-footer">
+    <span>SimuLab · SimulacionEcoWeb · proyecto educativo de código abierto</span>
+    <span>Los parámetros del último escenario se guardan en este navegador</span>
+  </footer>
+</div>
+<noscript><p style="padding:24px">SimulacionEcoWeb necesita JavaScript para ejecutar los simuladores.</p></noscript>
+</body>
+</html>

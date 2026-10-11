@@ -1,0 +1,12 @@
+{
+  "name": "simulacionecoweb",
+  "version": "1.0.0",
+  "description": "SimulacionEcoWeb (SimuLab): 8 simuladores de economía, inventarios, cadena de suministro y colas. Sitio estático sin compilación.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "start": "python3 -m http.server 8080"
+  },
+  "license": "MIT"
+}
